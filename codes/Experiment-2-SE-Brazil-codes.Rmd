@@ -1,0 +1,767 @@
+---
+title: "Experiment 2: Codes for LMMs and plots involving PCIS and Consumption rate ~ preyDensity*wave fetch"
+author: "André Pardal"
+date: "10 November 2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+##Loading packages ##
+```{r loading packages}
+
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+library(openxlsx)  
+library(readxl)
+library(dplyr)
+library(plyr)
+library(forcats)
+library(tidyverse)
+library(grid)
+library(xlsx)
+library(writexl)
+library(ggeffects)
+library(nlme)
+
+setwd("~/Desktop/Chapter 2/submission/Oecologia/Review-9-21/Github/data")
+dir()
+```
+
+
+## LMM for effect of Chla and SST on PCIS ##
+```{r PCIS}
+
+PCIS_LE <- read_excel("Pardal-2021-data-Exp-02.xlsx", sheet = 10)
+str(PCIS_LE)
+
+PCIS_LE$PCIS_final <- as.numeric(PCIS_LE$PCIS_final)
+PCIS_LE$Chla       <- as.numeric(PCIS_LE$Chla)
+PCIS_LE$temp       <- as.numeric(PCIS_LE$temp)
+PCIS_LE$plot       <- as.factor(PCIS_LE$plot)
+PCIS_LE$site       <- as.factor(PCIS_LE$site)
+
+PCIS_LE <- PCIS_LE[!is.na(PCIS_LE$PCIS_final),]## exclude NAs
+
+str(PCIS_LE)
+hist(PCIS_LE$PCIS_final)
+
+#### *** Verify homogeneity of variances per stratum *** ####
+a0 <- gls(PCIS_final ~ Chla + temp, method = "REML", data = PCIS_LE)
+plot(a0)## Evidence of unequal variances ##
+
+a1 <- gls(PCIS_final ~ Chla + temp, method = "REML", weights = varPower(form=~ Chla), data = PCIS_LE)
+a2 <- gls(PCIS_final ~ Chla + temp, method = "REML", weights = varPower(form=~ temp), data = PCIS_LE)
+a3 <- gls(PCIS_final ~ Chla + temp, method = "REML", weights = varExp(form=~ Chla), data = PCIS_LE)
+a4 <- gls(PCIS_final ~ Chla + temp, method = "REML", weights = varIdent(form=~ 1|site), data = PCIS_LE)
+
+m <- list(a0, a1, a2, a3, a4) ## list of models under comparison ##
+modnames.m <- c("a0", "a1", "a2", "a3", "a4") ## naming different models ##
+AICctab(m, mnames = modnames.m, base = TRUE, weights = TRUE, logLik = TRUE) ## AICc tab ##
+
+anova(a0, a4)
+plot(a4)
+## Result: heterocedasticity; therefore consider model that account for that ##
+
+#### *** LMM: pcis ~ prey density*wave exposure and random effect of site *** ####
+m.pcis2a <- lme(PCIS_final ~ Chla + temp, random = ~1|site, data = PCIS_LE)
+plot(m.pcis2a)## not OK ##
+
+m.pcis <- lme(PCIS_final ~ Chla + temp, random = ~1|site, weights = varIdent(form=~ 1|site), data = PCIS_LE)
+
+plot(resid(m.pcis, type = "normalized") ~ fitted(m.pcis)) ## OK ##
+plot(resid(m.pcis, type = "normalized") ~ PCIS_LE$Chla) ## OK ##
+plot(resid(m.pcis, type = "normalized") ~ PCIS_LE$temp) ## OK ##
+
+summary(m.pcis)
+VarCorr(m.pcis)
+hist(resid(m.pcis, type = "normalized"))
+
+m.pcisML  <- lme(PCIS_final ~ Chla + temp, random = ~1|site, data = PCIS_LE, weights = varIdent(form=~ 1|site), method = "ML")
+m.pcisML2 <- lme(PCIS_final ~ Chla, random = ~1|site, data = PCIS_LE, weights = varIdent(form=~ 1|site), method = "ML")
+
+anova(m.pcisML, m.pcisML2)
+
+m.pcisML3 <- lme(PCIS_final ~ temp, random = ~1|site, data = PCIS_LE, varIdent(form=~ 1|site), method = "ML")
+anova(m.pcisML, m.pcisML3)
+
+## FINAL MODEL: PCIS_final ~ CHLA + TEMPERATURE; NO EFFECT OF ANY FACTOR ##
+summary(m.pcis)
+VarCorr(m.pcis)
+
+## Model for: PCIS ~ long ##
+m.long <- lme(PCIS_final ~ long, random = ~1|site, weights = varIdent(form=~ 1|site), data = PCIS_LE)
+
+summary(m.long)
+plot(m.long)
+hist(residuals(m.long))
+VarCorr(m.long)
+```
+
+
+## Predictions of PCIS LMM ##
+```{r predictions PCIS}
+
+#### Predictions for Chla ####
+PCIS_LE_pred       <- PCIS_LE ## Dataframe for predictions ##
+PCIS_LE_pred       <- subset(PCIS_LE_pred, select = c(2, 6, 7, 16)) ## keep only useful columns ##
+PCIS_LE_pred$Chla2 <- as.character(PCIS_LE_pred$Chla) ## create character column to match ##
+
+mydf = ggpredict(m.pcis, terms = c("Chla", "temp"))
+names(mydf) <- c("Chla", "predicted", "sd", "low", "high", "temp") ## renaming output ##
+mydf$Chla2 = as.character(mydf$Chla)
+
+PCIS_LE_pred$predicted  <- mydf$predicted[match(as.character(PCIS_LE_pred$Chla2), as.factor(mydf$Chla2))]
+PCIS_LE_pred$low        <- mydf$low[match(as.character(PCIS_LE_pred$Chla2), as.factor(mydf$Chla2))]
+PCIS_LE_pred$high       <- mydf$high[match(as.character(PCIS_LE_pred$Chla2), as.factor(mydf$Chla2))]
+
+pred1 <-
+ggplot(PCIS_LE_pred, aes(x = Chla, y = PCIS_final)) +
+     geom_ribbon(aes(ymin = low, ymax = high), alpha = .3) +
+     scale_fill_manual(values=c("grey75", "grey75")) +
+     geom_line(aes(y = predicted), size = 1.1) +
+     #scale_linetype_manual(values= c("solid", "longdash"))+
+     geom_point(size= 2.5, alpha=0.95) + 
+     scale_shape_manual(values=c(15))+
+     scale_color_manual(values=c('black')) +
+     theme_classic() +
+     theme(axis.text.x = element_text(size=14, color="black"), 
+           axis.text.y = element_text(size=14, color="black"),
+           axis.title.x = element_text(color="black", size=16.),
+           axis.title.y = element_text(color="black", size=16)) +
+     labs(x = expression(paste("satellite Chla (mg.m"^-3,")")),
+          y = "PCIS") +
+     theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+     theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+     theme(axis.ticks.length = unit(4, "pt")) +
+     theme(legend.position = c(.02, .93),
+           legend.justification = c("left"),
+           legend.box.just = "left",
+           legend.margin = margin(0, 0, 0, 0),
+           legend.key.size = unit(1.5,"line")) +
+     theme(legend.title = element_text(color = "white", size = 5),
+           legend.text = element_text(color = "black", size=11))#+
+      #expand_limits(x=c(0,5)) + xlim(0.8, 5.0)
+     #scale_x_continuous(breaks = seq(0, 5))
+
+pred1
+
+rm(mydf, PCIS_LE_pred)
+
+### Predictions for temperature ###
+
+PCIS_LE_pred       <- PCIS_LE ## Dataframe for predictions ##
+PCIS_LE_pred       <- subset(PCIS_LE_pred, select = c(2, 6, 7, 16)) ## keep only useful columns ##
+PCIS_LE_pred$temp2 <- as.character(PCIS_LE_pred$temp) ## create character column to match ##
+
+mydf        <- ggpredict(m.pcis, terms = c("temp", "Chla"))
+names(mydf) <- c("temp", "predicted", "sd", "low", "high", "Chla") ## renaming output ##
+mydf$temp2  <- as.character(mydf$temp)
+
+PCIS_LE_pred$predicted  <- mydf$predicted[match(as.character(PCIS_LE_pred$temp2), as.factor(mydf$temp2))]
+PCIS_LE_pred$low        <- mydf$low[match(as.character(PCIS_LE_pred$temp2), as.factor(mydf$temp2))]
+PCIS_LE_pred$high       <- mydf$high[match(as.character(PCIS_LE_pred$temp2), as.factor(mydf$temp2))]
+
+pred2 <-
+ggplot(PCIS_LE_pred, aes(x = temp, 
+                         y = PCIS_final)) +
+     geom_ribbon(aes(ymin = low, 
+                     ymax = high), 
+                 alpha = .3) +
+     scale_fill_manual(values=c("grey75", 
+                                "grey75")) +
+     geom_line(aes(y = predicted), 
+               size = 1.1) +
+     #scale_linetype_manual(values= c("solid", "longdash"))+
+     geom_point(size= 2.5, 
+                alpha=0.95) + 
+     scale_shape_manual(values=c(15))+
+     scale_color_manual(values=c('black')) +
+     theme_classic() +
+     theme(axis.text.x = element_text(size=14, 
+                                      color="black"), 
+           axis.text.y = element_text(size=14, 
+                                      color="black"),
+           axis.title.x = element_text(color="black", 
+                                       size=16.),
+           axis.title.y = element_text(color="black", 
+                                       size=16)) +
+        labs(x = expression(paste("sea temperature (°C)")),
+          y = "PCIS") +
+     theme(axis.ticks = element_line(colour = "black", 
+                                     size = 0.8)) +
+     theme(axis.line = element_line(colour = 'black', 
+                                    size = 0.8)) +
+     theme(axis.ticks.length = unit(4, "pt")) +
+     theme(legend.position = c(.02, .93),
+           legend.justification = c("left"),
+           legend.box.just = "left",
+           legend.margin = margin(0, 0, 0, 0),
+           legend.key.size = unit(1.5,"line")) +
+     theme(legend.title = element_text(color = "white", 
+                                       size = 5),
+           legend.text = element_text(color = "black", 
+                                      size=11))+
+     theme(plot.margin=unit(c(0.2, 1, 0.2, 0.2), "cm"))
+
+pred2
+
+ggarrange(pred1, pred2, ncol = 2, nrow = 1, align = "hv")
+#ggsave("pcis-exp02.svg", dpi = 400, width = 12.5, height = 3.57, units = "in") ## Okay
+```
+
+
+## Residuals for PCIS model: PCIS ~ Chla + SST ##
+```{r}
+
+res.pcis1 <- residuals(m.pcis, type = "normalized") ## to get residuals of the model ##
+fit.pcis1 <- fitted(m.pcis)                         ## to get fitted values  of the model ##
+
+res.pcis1 <- cbind(res.pcis1, fit.pcis1) ## binding columns ##
+res.pcis1 <- as.data.frame(res.pcis1) ## transforming object in dataframe ##
+
+res.pcis1$Chla <- PCIS_LE$Chla ## getting column Chla from dataframe with same length ##
+res.pcis1$temp <- PCIS_LE$temp ## getting column temp from dataframe with same length ##
+
+res.1 <-
+  ggplot(res.pcis1, aes(x=fit.pcis1, y=res.pcis1)) + theme_linedraw() + 
+  geom_point(size=2.5, alpha=0.7, colour="black")+
+  theme(axis.text.x = element_text(size=12, color="black"), 
+        axis.text.y = element_text(size=12, color="black"),
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "fitted values", 
+       y = "normalised residuals") +
+  theme(strip.text.x = element_text(size = 12), 
+        strip.text.y = element_text(size = 12))+
+  theme(legend.position = "none") + 
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))+ 
+  theme(plot.margin = unit(c(0.15,0.30,0.15,.15), "lines")) +
+  theme(strip.text.x = element_text(size = 10), 
+        strip.text.y = element_text(size = 10))+
+  theme(panel.background = element_rect(fill = "white",colour = "black", size = 1.0, linetype = "solid"),
+        panel.grid.major = element_line(size = .5, linetype = 'solid',colour = "gray95"), 
+        panel.grid.minor = element_line(size = .5, linetype = 'solid',colour = "gray95"))+
+  scale_x_continuous(breaks = seq(from = -0.0015, to = 0.0005, by = 0.0005))
+
+res.2 <-
+  ggplot(res.pcis1, aes(x= Chla, y=res.pcis1)) + theme_linedraw()+ 
+  geom_point(size=2.5, alpha=0.7, colour="black")+
+  theme(axis.text.x = element_text(size=12, color="black"), 
+        axis.text.y = element_text(size=12, color="black"),
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "Chla", y = "normalised residuals") +
+  theme(strip.text.x = element_text(size = 12), 
+        strip.text.y = element_text(size = 12))+
+  theme(legend.position = "none") + 
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))+ 
+  theme(plot.margin = unit(c(0.15,0.15,.3,.15), "lines")) +
+  theme(strip.text.x = element_text(size = 10), 
+        strip.text.y = element_text(size = 10))+
+  theme(panel.background = element_rect(fill = "white",colour = "black", size = 1.0, linetype = "solid"),
+        panel.grid.major = element_line(size = .5, linetype = 'solid',colour = "gray95"), 
+        panel.grid.minor = element_line(size = .5, linetype = 'solid',colour = "gray95"))
+
+res.3 <- 
+  ggplot(res.pcis1, aes(x= temp, y=res.pcis1)) + theme_linedraw()+ 
+  geom_point(size=2.5, alpha=0.7, colour="black")+
+  theme(axis.text.x = element_text(size=12, color="black"), 
+        axis.text.y = element_text(size=12, color="black"),
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "temperature", y = "normalised residuals") +
+  theme(strip.text.x = element_text(size = 12), 
+        strip.text.y = element_text(size = 12))+
+  theme(legend.position = "none") + 
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))+ 
+  theme(plot.margin = unit(c(0.15,0.15,.3,.15), "lines")) +
+  theme(strip.text.x = element_text(size = 10), 
+        strip.text.y = element_text(size = 10))+
+  theme(panel.background = element_rect(fill = "white",colour = "black", size = 1.0, linetype = "solid"),
+        panel.grid.major = element_line(size = .5, linetype = 'solid',colour = "gray95"), 
+        panel.grid.minor = element_line(size = .5, linetype = 'solid',colour = "gray95"))
+
+res.4 <- 
+  ggplot(res.pcis1, aes(x=res.pcis1)) + geom_histogram(color="black", fill="white", bins=8)+ 
+  theme_linedraw()+
+  theme(axis.text.x = element_text(size=12, color="black"), 
+        axis.text.y = element_text(size=12, color="black"),
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "normalised residuals", y = "count") +
+  theme(strip.text.x = element_text(size = 12), 
+        strip.text.y = element_text(size = 12))+
+  theme(legend.position = "none") + 
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))+ 
+  theme(plot.margin = unit(c(1.2,0.15,0.15,.15), "lines")) +
+  theme(strip.text.x = element_text(size = 10), 
+        strip.text.y = element_text(size = 10))+
+  theme(panel.background = element_rect(fill = "white",colour = "black", size = 1.0, linetype = "solid"),
+        panel.grid.major = element_line(size = .5, linetype = 'solid',colour = "gray95"), 
+        panel.grid.minor = element_line(size = .5, linetype = 'solid',colour = "gray95"))
+
+r.pcis <- ggarrange(res.1, res.2, res.3, res.4, ncol = 2, nrow = 2, align = "hv")
+r.pcis <- annotate_figure(r.pcis, fig.lab = "PCIS", fig.lab.face = "bold", fig.lab.size=12)
+r.pcis
+
+#ggsave("residuals-pcis-exp02.png", dpi = 300, width = 5.82, height = 6.01, units = "in")
+```
+
+
+## CONSUMPTION RATE ~ Chla + SST ##
+```{r consumption rate}
+
+exp2019 <- read_excel("Pardal-2021-data-Exp-02.xlsx", sheet = 11)
+str(exp2019)
+
+exp2019$consRate <- as.numeric(exp2019$consRate)
+exp2019$Chla     <- as.numeric(exp2019$Chla)
+exp2019$temp     <- as.numeric(exp2019$temp)
+exp2019$plot     <- as.factor(exp2019$plot)
+exp2019$site     <- as.factor(exp2019$site)
+
+hist(exp2019$consRate) 
+
+exp2019b <- exp2019[!is.na(exp2019$consRate),] ## exclude NAs ##
+
+## important: consRate negatives values turned to 0 (there cannot be negative consumprion rate):##
+exp2019b$consRate[exp2019b$consRate < 0] = 0
+
+b0 <- gls((consRate) ~ Chla + temp, method = "REML", data = exp2019b)
+plot(b0)## Evidence of unequal variances ##
+
+b1 <- gls(consRate ~ Chla + temp, method = "REML", weights = varPower(form= ~ Chla), data = exp2019b)
+b2 <- gls(consRate ~ Chla + temp, method = "REML", weights = varPower(form= ~ temp), data = exp2019b)
+b3 <- gls(consRate ~ Chla + temp, method = "REML", weights = varExp(form= ~ Chla), data = exp2019b)
+b4 <- gls(consRate ~ Chla + temp, method = "REML", weights = varIdent(form= ~ 1|site), data = exp2019b)
+
+m1 <- list(b0, b1, b2, b3, b4) ## list of models under comparison ##
+modnames.m1 <- c("b0", "b1", "b2", "b3", "b4") ## naming different models ##
+AICctab(m1, mnames = modnames.m1, base = TRUE, weights = TRUE, logLik = TRUE) ## AICc tab ##
+## Equal variances ##
+
+m.cons <- lme(consRate ~ Chla + temp, random = ~1|site, data = exp2019b)
+summary(m.cons)
+VarCorr(m.cons)
+
+plot(m.cons)
+hist(resid(m.cons))
+
+m.cons2 <- lme(consRate ~ Chla, random = ~1|site, data = exp2019b)
+summary(m.cons2)
+
+m.cons3 <- lme(consRate ~ temp, random = ~1|site, data = exp2019b)
+summary(m.cons3)
+
+## Testing for spatial pattern in Consumption rate (~ longitude) ##
+m.long2 <- lme(consRate ~ long, random = ~1|site, weights = varIdent(form = ~ 1|site), data = exp2019b)
+
+summary(m.long2)
+plot(m.long2)
+hist(residuals(m.long2))
+VarCorr(m.long2)
+``` 
+
+
+### Predictions: consumption rate ~ Chla + SST ##
+```{r predictions consumption}
+
+#### Predictions for Chla ####
+exp2019_pred       <- exp2019b ## Dataframe for predictions ##
+exp2019_pred       <- subset(exp2019_pred, select = c(2, 6, 7, 16)) ## keep only useful columns ##
+exp2019_pred$Chla2 <- as.character(exp2019_pred$Chla) ## create character column to match ##
+
+mydf        <- ggpredict(m.cons, terms = c("Chla", "temp"))
+names(mydf) <- c("Chla", "predicted", "sd", "low", "high", "temp") ## renaming output ##
+mydf$Chla2  <- as.character(mydf$Chla)
+
+exp2019_pred$predicted  <- mydf$predicted[match(as.character(exp2019_pred$Chla2), as.factor(mydf$Chla2))]
+exp2019_pred$low        <- mydf$low[match(as.character(exp2019_pred$Chla2), as.factor(mydf$Chla2))]
+exp2019_pred$high       <- mydf$high[match(as.character(exp2019_pred$Chla2), as.factor(mydf$Chla2))]
+
+pred3 <-
+ggplot(exp2019_pred, aes(x = Chla,
+                         y = consRate)) +
+     geom_ribbon(aes(ymin = low, ymax = high), 
+                 alpha = .3) +
+     scale_fill_manual(values=c("grey75", "grey75")) +
+     geom_line(aes(y = predicted), 
+               size = 1.1) +
+     geom_point(size= 2.5, 
+                alpha=0.95) + 
+     scale_shape_manual(values=c(15))+
+     scale_color_manual(values=c('black')) +
+     theme_classic() +
+     theme(axis.text.x = element_text(size=14, color="black"), 
+           axis.text.y = element_text(size=14, color="black"),
+           axis.title.x = element_text(color="black", size=16.),
+           axis.title.y = element_text(color="black", size=16)) +
+     labs(x = expression(paste("satellite Chla (mg.m"^-3,")")),
+          y = expression(atop("consumption rate", paste("(barnacles .dogwhelk"^-1, ".day"^-1,")")))) +
+     theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+     theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+     theme(axis.ticks.length = unit(4, "pt")) +
+     theme(legend.position = c(.02, .93),
+           legend.justification = c("left"),
+           legend.box.just = "left",
+           legend.margin = margin(0, 0, 0, 0),
+           legend.key.size = unit(1.5,"line")) +
+     theme(legend.title = element_text(color = "white", size = 5),
+           legend.text = element_text(color = "black", size=11))+
+     theme(plot.margin=unit(c(0.2, 1, 0.2, 0.2), "cm"))   
+
+pred3
+
+rm(mydf, exp2019_pred)
+
+### Predition for temperature ###
+
+exp2019_pred       <- exp2019b ## Dataframe for predictions ##
+exp2019_pred       <- subset(exp2019_pred, select = c(2, 6, 7, 16)) ## keep only useful columns ##
+exp2019_pred$temp2 <- as.character(exp2019_pred$temp) ## create character column to match ##
+
+mydf        <- ggpredict(m.cons, terms = c("temp", "Chla"))
+names(mydf) <- c("temp", "predicted", "sd", "low", "high", "Chla") ## renaming output ##
+mydf$temp2  <-as.character(mydf$temp)
+
+exp2019_pred$predicted  <- mydf$predicted[match(as.character(exp2019_pred$temp2), as.factor(mydf$temp2))]
+exp2019_pred$low        <- mydf$low[match(as.character(exp2019_pred$temp2), as.factor(mydf$temp2))]
+exp2019_pred$high       <- mydf$high[match(as.character(exp2019_pred$temp2), as.factor(mydf$temp2))]
+
+pred4 <-
+ggplot(exp2019_pred, aes(x = temp, 
+                         y = consRate)) +
+     geom_ribbon(aes(ymin = low, ymax = high), 
+                 alpha = .3) +
+     scale_fill_manual(values=c("grey75", "grey75")) +
+     geom_line(aes(y = predicted), size = 1.1) +
+     geom_point(size= 2.5, 
+                alpha=0.95) + 
+     scale_shape_manual(values=c(15))+
+     scale_color_manual(values=c('black')) +
+     theme_classic() +
+     theme(axis.text.x = element_text(size=14, color="black"), 
+           axis.text.y = element_text(size=14, color="black"),
+           axis.title.x = element_text(color="black", size=16.),
+           axis.title.y = element_text(color="black", size=16)) +
+        labs(x = expression(paste("temperature (°C)")),
+          y = expression(atop("consumption rate", paste("(barnacles .dogwhelk"^-1, ".day"^-1,")")))) +
+     theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+     theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+     theme(axis.ticks.length = unit(4, "pt")) +
+     theme(legend.position = c(.02, .93),
+           legend.justification = c("left"),
+           legend.box.just = "left",
+           legend.margin = margin(0, 0, 0, 0),
+           legend.key.size = unit(1.5,"line")) +
+     theme(legend.title = element_text(color = "white", size = 5),
+           legend.text = element_text(color = "black", size=11))+
+     theme(plot.margin=unit(c(0.2, 1, 0.2, 0.2), "cm"))  
+
+pred4
+
+ggarrange(pred3, pred4, pred1, pred2, ncol = 2, nrow = 2, align = "hv")
+#ggsave("predictions-large-scale-final.svg", dpi = 400, width = 12.70, height = 8.67, units = "in")
+##Saving 12.7 x 8.67 in image##
+```
+
+
+## Residuals for consumption rate model: PCIS ~ Chla + SST ##
+```{r Residuals for ConsRate model}
+
+res.cons1 <- residuals(m.cons, type = "normalized") ## to get residuals of the model ##
+fit.cons1 <- fitted(m.cons) ## to get fitted valies  of the model ##
+
+res.cons1 <- cbind(res.cons1, fit.cons1) ## binding columns ##
+res.cons1 <- as.data.frame(res.cons1) ## transforming objetc in dataframe ##
+
+res.cons1$Chla <- exp2019b$Chla ## getting column time from dataframe with same length ##
+res.cons1$temp <- exp2019b$temp ## getting column time from dataframe with same length ##
+
+res.1 <-
+  ggplot(res.cons1, aes(x=fit.cons1, y=res.cons1)) + theme_linedraw()+ 
+  geom_point(size=2.5, alpha=0.7, colour="black")+
+  theme(axis.text.x = element_text(size=12, color="black"), 
+        axis.text.y = element_text(size=12, color="black"),
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "fitted values", y = "normalised residuals") +
+  theme(legend.position = "none") + 
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))+ 
+  theme(plot.margin = unit(c(0.15,0.30,0.15,.15), "lines")) +
+  theme(panel.background = element_rect(fill = "white",colour = "black", size = 1.0, linetype = "solid"),
+        panel.grid.major = element_line(size = .5, linetype = 'solid',colour = "gray95"), 
+        panel.grid.minor = element_line(size = .5, linetype = 'solid',colour = "gray95"))
+
+res.2 <-
+  ggplot(res.cons1, aes(x= Chla, y=res.cons1)) + theme_linedraw()+ 
+  geom_point(size=2.5, alpha=0.7, colour="black")+
+  theme(axis.text.x = element_text(size=12, color="black"), 
+        axis.text.y = element_text(size=12, color="black"),
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "Chla", y = "normalised residuals") +
+  theme(legend.position = "none") + 
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))+ 
+  theme(plot.margin = unit(c(0.15,0.15,.3,.15), "lines")) +
+  theme(panel.background = element_rect(fill = "white",colour = "black", size = 1.0, linetype = "solid"),
+        panel.grid.major = element_line(size = .5, linetype = 'solid',colour = "gray95"), 
+        panel.grid.minor = element_line(size = .5, linetype = 'solid',colour = "gray95"))
+
+res.3 <- 
+  ggplot(res.cons1, aes(x= temp, y=res.cons1)) + theme_linedraw()+ 
+  geom_point(size=2.5, alpha=0.7, colour="black")+
+  theme(axis.text.x = element_text(size=12, color="black"), 
+        axis.text.y = element_text(size=12, color="black"),
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "temperature", 
+       y = "normalised residuals") +
+  theme(legend.position = "none") + 
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))+ 
+  theme(plot.margin = unit(c(0.15,0.15,.3,.15), "lines")) +
+  theme(panel.background = element_rect(fill = "white",colour = "black", size = 1.0, linetype = "solid"),
+        panel.grid.major = element_line(size = .5, linetype = 'solid',colour = "gray95"), 
+        panel.grid.minor = element_line(size = .5, linetype = 'solid',colour = "gray95"))
+
+res.4 <-
+  ggplot(res.cons1, aes(x=res.cons1)) + 
+  geom_histogram(color="black", fill="white", bins=9) + theme_linedraw()+
+  theme(axis.text.x = element_text(size=12, color="black"), 
+        axis.text.y = element_text(size=12, color="black"),
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "normalised residuals", 
+       y = "count") +
+  theme(legend.position = "none") + 
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))+ 
+  theme(plot.margin = unit(c(1.2,0.15,0.15,.15), "lines")) +
+  theme(panel.background = element_rect(fill = "white",colour = "black", size = 1.0, linetype = "solid"),
+        panel.grid.major = element_line(size = .5, linetype = 'solid',colour = "gray95"), 
+        panel.grid.minor = element_line(size = .5, linetype = 'solid',colour = "gray95"))
+
+r.cons <- ggarrange(res.1, res.2, res.3, res.4, ncol = 2, nrow = 2, align = "hv")
+r.cons <- annotate_figure(r.cons, fig.lab = "consumption rate", fig.lab.face = "bold", fig.lab.size=12)
+r.cons
+
+#ggsave("RES-CR-Exp2-Rev.png", dpi = 300, width = 5.82, height = 6.01, units = "in")
+```
+
+
+## Initial prey density in +P and -P treatment (Fig. 2 in the manuscript) ##
+```{r Prey density time 0}
+
+tetra_density <- read_excel("Pardal-2021-data-Exp-02.xlsx", sheet = 2)
+str(tetra_density)
+
+tetra_density <- as.data.frame(subset(tetra_density, (day == "0")))
+
+tetra_density$preyNumber <- as.numeric(tetra_density$preyNumber)
+tetra_density$site       <- as.factor(tetra_density$site)
+tetra_density$predator   <- as.factor(tetra_density$predator)
+tetra_density$predTreat  <- as.factor(tetra_density$predTreat)
+
+str(tetra_density)
+
+tetra_density2 <- tetra_density[!is.na(tetra_density$preyNumber),] ## exclude NAs ##
+
+## for plotting the global mean line ###dt2 =  ddply(tetra_density2, "predator", transform, 
+       #prey_mean  = mean(preyNumber)) 
+
+tetra_density2$site <- factor(tetra_density2$site, 
+                              levels = c("Astúrias", "Iporanga", "Itassucê", "Zimbro", 
+                                         "P. Vermelha", "P. Grande", "Grumari", 
+                                         "Piratininga","Fortaleza", "Prainha"))
+
+tetra_density2$predator <- factor(tetra_density2$predator, 
+                             levels = c("−P", "+P"))
+
+barnacle_density2 <- 
+  ggplot(tetra_density2, aes(x = predator, 
+                             y = preyNumber, 
+                             group = site))+ 
+  theme_classic() +
+  #geom_jitter(position=position_jitter(0.02), 
+             #size=2.3, 
+             #alpha=0.2) + 
+  #geom_hline(aes(yintercept = prey_mean), 
+             #colour = 'gray', 
+            # linetype="dashed",
+             #size=1.2)+
+  stat_summary(fun.data="mean_se",  
+               fun.args = list(mult=1),
+               geom="pointrange", 
+               color = "black", 
+               size=1.3)+
+  facet_grid(~ site, scale='free_y') +
+  theme(axis.text.x = element_text(size=12, color="black"),
+        axis.text.y = element_text(size=12, color="black"), 
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "treatment", 
+       y = expression(paste("number of barnacles (ind.625 cm"^-2,")")))+
+  theme(strip.text.x = element_text(size = 12), 
+        strip.text.y = element_text(size = 12))+
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))
+
+barnacle_density2 
+
+#ggsave("figs-rev/Oecologia-LE-density_initial.svg", dpi = 400, width = 11.2, height = 3.8, units="in") 
+```
+
+
+## Background mortality ##
+```{r Background mortality}
+
+nat_mortality <- read_excel("Pardal-2021-data-Exp-02.xlsx", sheet= 9)
+str(nat_mortality)
+
+nat_mortality$site <- as.factor(nat_mortality$site)
+#nat_mortality$mortality = (nat_mortality$Bo) - (nat_mortality$Bt)
+
+str(nat_mortality)
+
+mort <- aggregate(mortNat ~ site, mean, data = nat_mortality)
+summary(nat_mortality)
+
+nat_mortality$site <- factor(nat_mortality$site, 
+                             levels = c("Astúrias", "Iporanga", "Itassucê", "Zimbro", 
+                                        "P. Vermelha", "P. Grande", "Grumari", 
+                                        "Piratininga","Fortaleza", "Prainha"))
+
+exp2_back <-
+  ggplot(nat_mortality, aes(y = mortNat, 
+                            x = site))+ 
+  theme_classic() +
+  geom_point(size=2.3, 
+             alpha=0.2) + 
+    stat_summary(fun.data="mean_se",  
+               fun.args = list(mult=1),
+               geom="pointrange", 
+               color = "black", 
+               size=1.3)+
+  theme(axis.text.x = element_text(size=12, color="black", 
+                                   angle= 90, 
+                                   vjust = 0.5, 
+                                   hjust = 1),
+        axis.text.y = element_text(size=12, color="black",), 
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "site", 
+       y = expression(atop("background mortality rate ", 
+                          paste("(barnacles.day"^-1,")")))) +
+  theme(strip.text.x = element_text(size = 12), 
+        strip.text.y = element_text(size = 12))+
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))
+
+
+back_mortality <- ggarrange(gexp1_back, exp2_back, ncol = 1, nrow = 2, align = "hv")
+back_mortality
+
+#ggsave("figs-rev/back-mortality1-2.svg", dpi = 300)
+```
+
+
+## Plotting spatial patterns (ESM: Appendix A, Fig. A6) ##
+```{r PCIS and ConsRate ~ latitude and longitude}
+
+exp2019b$site  <- factor(exp2019b$site , 
+                        levels = c("Astúrias", "Iporanga", "Itassucê", 
+                                   "Zimbro", "P. Vermelha", "P. Grande", 
+                                   "Grumari", "Piratininga","Fortaleza", 
+                                   "Prainha"))
+
+spt01 <-  
+  ggplot(exp2019b, aes(y= consRate, x= long))+ 
+  geom_jitter(height = 0, 
+             width = 0.05, 
+             size=2.3, 
+             alpha=0.25) + 
+  stat_summary(fun.data = "mean_se",  
+               fun.args = list(mult=1), 
+               geom = "pointrange", 
+               size=1.7)+
+  theme_classic() + 
+  theme(axis.text.x = element_text(size = 16, 
+                                   color = "black"), 
+                                   #angle = 90, 
+                                   #vjust = 0.5, 
+                                   #hjust = 1), 
+         axis.text.y = element_text(size = 16, 
+                                     color = "black"),
+         axis.title.x = element_text(color = "black", 
+                                      size = 16),
+         axis.title.y = element_text(color="black", 
+                                      size=16))+ 
+  labs(x = "", 
+      y = expression(atop("consumption rate", 
+                          paste("(barnacles .dogwhelk"^-1, ".day"^-1,")")))) +
+  scale_color_manual(values=c('black','red'))+ 
+  theme(strip.text.x = element_text(size = 12), 
+        strip.text.y = element_text(size = 12))+ 
+  theme(legend.position = "none") +
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) + 
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) + 
+  theme(axis.ticks.length = unit(4, "pt"))
+
+spt01
+
+spt02 <-  
+  ggplot(PCIS_LE, aes(y= PCIS_final, x = long))+ 
+  geom_jitter(height = 0, 
+             width = 0.05, 
+             size=2.3, 
+             alpha=0.25) + 
+  stat_summary(fun.data = "mean_se",  
+               fun.args = list(mult=1), 
+               geom = "pointrange", 
+               size=1.7)+
+  theme_classic() + 
+  theme(axis.text.x = element_text(size = 16, 
+                                   color = "black"), 
+                                   #angle = 90, 
+                                   #vjust = 0.5, 
+                                   #hjust = 1), 
+         axis.text.y = element_text(size = 16, 
+                                     color = "black"),
+         axis.title.x = element_text(color = "black", 
+                                      size = 16),
+         axis.title.y = element_text(color="black", 
+                                      size=16))+ 
+  labs(x = "longitude", 
+      y = "PCIS") +
+  scale_color_manual(values=c('black','red'))+ 
+  theme(strip.text.x = element_text(size = 12), 
+        strip.text.y = element_text(size = 12))+ 
+  theme(legend.position = "none") +
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) + 
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) + 
+  theme(axis.ticks.length = unit(4, "pt"))
+
+spt02
+
+ggarrange(spt01, spt02, ncol = 1, nrow = 2, align = "hv")
+#ggsave("spatial-plot-final.svg", dpi = 300) #width = 195, height = 195, units = "mm") ## Okay
+```

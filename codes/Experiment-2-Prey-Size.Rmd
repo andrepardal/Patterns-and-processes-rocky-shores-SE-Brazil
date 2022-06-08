@@ -1,0 +1,241 @@
+---
+title: "Relationships among eaten/available barnacle prey and ocean conditions/predation responses"
+author: "André Pardal"
+date: "10 November 2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+chunk_output_type: console
+---
+
+## Loading packages and setting working directory ##
+```{r loading packages and setting working directory}
+
+library(lme4)
+library(lmerTest)
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+library(openxlsx)  
+library(readxl)
+library(dplyr)
+library(plyr)
+library(forcats)
+library(tidyverse)
+library(grid)
+library(xlsx)
+library(writexl)
+library(nlme)
+library(bbmle)
+library(ggeffects)
+
+setwd("~/Desktop/Chapter 2/submission/Oecologia/Review-9-21/Github/data")
+dir()
+```
+
+
+## Importing and organising data ##
+```{r importing data}
+
+### Sorting out data 
+preySize <- read_excel("Pardal-2021-data-Exp-02.xlsx", sheet = 8)
+str(preySize)
+
+preySize$site          <- as.factor(preySize$site)
+preySize$plot          <- as.factor(preySize$plot)
+preySize$consRate      <- as.numeric(preySize$consRate)
+preySize$PCIS_final    <- as.numeric(preySize$PCIS_final)
+preySize$sizeEaten     <- as.numeric(preySize$sizeEaten)
+preySize$sizeAvailable <- as.numeric(preySize$sizeAvailable)
+preySize$Chla          <- as.numeric(preySize$Chla)
+preySize$temp          <- as.numeric(preySize$temp)
+preySize$wf_log        <- as.numeric(preySize$wf_log)
+
+str(preySize)
+summary(preySize)
+
+## Transforming negative consumption rate to 0 ##
+preySize$consRate[preySize$consRate < 0] = 0 
+summary(preySize)
+                 
+str(preySize)
+
+## keep only useful columns ##
+preySize <- subset(preySize, select = c(5:11)) 
+
+str(preySize)
+summary(preySize)
+```
+
+
+## Fitting linear models for the relantionships among prey size and ocean conditions and predations responses ##
+```{r OLS linear models: doing it}
+
+hist(preySize$sizeEaten)## not bad
+hist(log(preySize$sizeEaten))## ignore
+
+### model a1 - size of eaten prey ~ Chla ###
+### size of barnacles consumed decreases as Chla increases ###
+modela1 <- lm((sizeEaten) ~ Chla, data = preySize)
+summary(modela1)
+
+shapiro.test((preySize$sizeEaten)) ## data is normal ##
+plot(modela1)
+hist(resid(modela1))## not bad
+plot(resid(modela1) ~ fitted((modela1)))## homocedasticity
+
+Chla_plot <- preySize[!is.na(preySize$sizeEaten),] ## exclude NAs ##
+plot(resid(modela1) ~ Chla_plot$Chla)
+
+### model a2 - size of eaten prey ~ temp ###
+### no relationship ###
+modela2 <- lm((sizeEaten) ~ temp, data = preySize)
+summary(modela2)
+hist(resid(modela2)) 
+
+### model b1 - size of eaten prey ~ size of available prey ###
+### size of barnacles eaten increases with size of available barnacles ###
+modelb1 <- lm((sizeEaten) ~ sizeAvailable, data = preySize)
+summary(modelb1)
+plot(modelb1)
+hist(resid(modelb1)) ## perfect ##
+plot(resid(modelb1) ~ fitted(modelb1)) ## homocedasticity
+
+### model c1 - size of available prey ~ Chla ###
+### There is no effect of Chla on the size of barnacles available ###
+
+hist(preySize$sizeAvailable)##ok
+
+modelc1 <- lm(sizeAvailable ~ wf_log, data = preySize)
+summary(modelc1)
+
+shapiro.test(preySize$sizeAvailable) ## data is normal ##
+plot(modelc1)
+hist(resid(modelc1)) ## perfect ##
+plot(resid(modelc1) ~ fitted(modelc1)) ## homocedasticity
+
+modelc2 <- lm(sizeAvailable ~ temp, data = preySize)
+summary(modelc2)
+
+### model d1 - CR ~ size of available prey ###
+### conRate increases with sizeAvailable ###
+
+hist(preySize$consRate)
+## using untranformed data 'cause transformations did not improve dist ##
+
+modeld1 <- lm((consRate) ~ sizeAvailable, data = preySize)
+summary(modeld1)
+plot(modeld1)
+hist(resid(modeld1)) ## not bad ##
+plot(resid(modeld1) ~ fitted((modeld1)))## homocedasticity
+
+### model d2 - CR ~ size of eaten prey ###
+### NO effect of size of consumed barnacles on consumption rate ###
+modeld2 <- lm((consRate) ~ sizeEaten, data = preySize, na.action = na.exclude)
+summary(modeld2)
+plot(modeld2)
+hist(resid(modeld2)) ## not bad ##
+
+#### PCIS:
+hist(preySize$PCIS_final)
+
+model3 <- lm(PCIS_final ~ sizeAvailable, data = preySize)
+summary(model3)
+plot(model3)
+hist(resid(model3)) ## Okay
+
+model4 <- lm(PCIS_final ~ sizeEaten, data = preySize)
+summary(model4)
+plot(model4)
+hist(resid(model4)) ## Okay
+```
+
+
+## Getting model predictions and plotting ##
+```{r Predictions of models plotted in the manuscript}
+
+preySize2 <- preySize[!is.na(preySize$sizeEaten),]
+
+pred           <- data.frame(predict(modela1, new.data = preySize2, interval = "confidence"))
+pred$Chla      <- preySize2$Chla
+pred$sizeEaten <- preySize2$sizeEaten
+str(pred)
+
+pred.fig1 <- ## plots with predictions (size of barnacles consumed ~ Chla) ##
+ggplot(pred, aes(x = Chla, y = sizeEaten)) +
+     geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = .3) +
+     geom_line(aes(y = fit), size = 1.1) +
+     #scale_linetype_manual(values= c("solid", "longdash"))+
+     geom_point(size= 2.7, alpha=0.95) + 
+     scale_shape_manual(values=c(15))+
+     theme_classic() +
+     theme(axis.text.x = element_text(size=14, color="black"), 
+           axis.text.y = element_text(size=14, color="black"),
+           axis.title.x = element_text(color="black", size=16.),
+           axis.title.y = element_text(color="black", size=16)) +
+labs(x = expression(paste("satellite Chla (mg.m"^-3,")")),
+     y = "size of consumed barnacles (mm)") +
+     theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+     theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+     theme(axis.ticks.length = unit(4, "pt")) +
+     theme(legend.position = c(.02, .93),
+           legend.justification = c("left"),
+           legend.box.just = "left",
+           legend.margin = margin(0, 0, 0, 0),
+           legend.key.size = unit(1.5,"line")) +
+     theme(legend.title = element_text(color = "white", size = 5),
+           legend.text = element_text(color = "black", size=11))+
+     theme(plot.margin=unit(c(0.2, 1, 0.2, 0.2), "cm")) +
+     xlim(1,5) + ylim(3.5, 12)
+pred.fig1
+
+#######
+preySize3           <- preySize[!is.na(preySize$sizeAvailable),]
+pred2               <- data.frame(predict(modelc1, newdata = preySize3, interval = "confidence"))
+pred2$Chla          <- preySize3$Chla
+pred2$sizeAvailable <- preySize3$sizeAvailable
+
+str(pred2)
+
+pred.fig2 <- ## plots with predictions (size of barnacles consumed ~ Chla) ##
+ggplot(pred2, aes(x = Chla, 
+                  y = sizeAvailable)) +
+     geom_ribbon(aes(ymin = lwr, 
+                     ymax = upr), 
+                 alpha = .3) +
+     geom_line(aes(y = fit), 
+               size = 1.1) +
+     scale_linetype_manual(values= c("solid", "longdash"))+
+     geom_point(size= 2.7, 
+                alpha=0.95) + 
+     scale_shape_manual(values=c(15))+
+     theme_classic() +
+     theme(axis.text.x = element_text(size=14, 
+                                      color="black"), 
+           axis.text.y = element_text(size=14, 
+                                      color="black"),
+           axis.title.x = element_text(color="black", 
+                                       size=16.),
+           axis.title.y = element_text(color="black", 
+                                       size=16)) +
+    labs(x = expression(paste("satellite Chla (mg.m"^-3,")")),
+         y = "size of available barnacles (mm)") +
+     theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+     theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+     theme(axis.ticks.length = unit(4, "pt")) +
+     theme(legend.position = c(.02, .93),
+           legend.justification = c("left"),
+           legend.box.just = "left",
+           legend.margin = margin(0, 0, 0, 0),
+           legend.key.size = unit(1.5,"line")) +
+     theme(legend.title = element_text(color = "white", size = 5),
+           legend.text = element_text(color = "black", size=11))+
+     theme(plot.margin=unit(c(0.2, 1, 0.2, 0.2), "cm")) +
+     xlim(1,5) +  ylim(3.5, 12)
+
+pred.fig2
+
+ggarrange(pred.fig2, pred.fig1, ncol = 1, nrow = 2, align = "hv")
+
+#ggsave("size-prey-LE.svg", dpi = 400) ## Saving 14.9 x 4.9 in image ##
+```

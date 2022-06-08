@@ -1,0 +1,613 @@
+---
+title:  "Experiment 1: Codes for LMMs and plots involving PCIS and Consumption rate ~ preyDensity*wave fetch"
+author: "André Pardal"
+date: "10 November 2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+chunk_output_type: console
+---
+
+## Loading packages 
+```{r Loading packages}
+
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+library(openxlsx) 
+library(readxl)
+library(dplyr)
+library(plyr)
+library(forcats)
+library(tidyverse)
+library(grid)
+library(lme4)
+library(nlme)
+library(lmerTest)
+library(bbmle)
+library(ggeffects)
+library(effects)
+library(glmmTMB)
+library(DHARMa)
+library(httr)
+library(tidytuesdayR)
+
+setwd("~/Desktop/Chapter 2/submission/Oecologia/Review-9-21/Github/data")
+```
+
+
+## LMM for effect of density of prey and wave fetch (wave exposure)
+```{r PCIS}
+
+PCIS <- readxl::read_excel(temp_file, sheet = 5)
+
+PCIS2 <- read_excel("Pardal-2021-data-Exp-01-Ubatuba.xlsx", sheet = 5)
+str(PCIS)
+
+PCIS$site        <- as.factor(PCIS$site)
+PCIS$preyDensity <- as.factor(PCIS$preyDensity)
+PCIS$wf_mean     <- as.numeric(PCIS$wf_mean)
+PCIS$PCIS_final  <- as.numeric(PCIS$PCIS_final)
+
+str(PCIS)
+
+hist(PCIS$PCIS_final)
+
+#### *** Verify homogeneity of variances per stratum *** ####
+a0 <- gls((PCIS_final) ~ preyDensity*wf_mean, method = "REML", data = PCIS)
+plot(a0)## Evidence of unequal variances ##
+
+a1 <- gls((PCIS_final) ~ preyDensity*wf_mean, method = "REML", weights = varIdent(form = ~1|preyDensity*wf_mean), data = PCIS)
+a2 <- gls((PCIS_final) ~ preyDensity*wf_mean, method = "REML", weights = varIdent(form = ~1|preyDensity), data = PCIS)
+a3 <- gls((PCIS_final) ~ preyDensity*wf_mean, method = "REML", weights = varIdent(form = ~1|wf_mean), data = PCIS)
+
+m          <- list(a0, a1, a2, a3) ## list of models under comparison ##
+modnames.m <- c("a0", "a1", "a2", "a3") ## naming different models ##
+AICctab(m, mnames= modnames.m, base=TRUE, weights=TRUE, logLik=TRUE) ## AICc tab ##
+
+anova(a2, a0)
+plot(a2)
+## Result: heterocedasticity; therefore consider model that account for that ##
+
+#### *** LMM: pcis ~ prey density*wave exposure and random effect of site *** ####
+m.pcis <- lme(PCIS_final ~ preyDensity*site, random = ~1|site, data = PCIS)
+
+plot(resid(m.pcis, type = "pearson") ~ fitted(m.pcis)) ## evidence of unequal variances ##
+plot(resid(m.pcis, type = "pearson") ~ PCIS$wf_mean) ## OK ##
+plot(resid(m.pcis, type = "pearson") ~ PCIS$preyDensity) ## different variance by treatment ##
+
+m.pcis1  <- lme(PCIS_final ~ preyDensity*wf_mean, random = ~1|site, weights = varIdent(form = ~1|preyDensity*wf_mean), data = PCIS)
+m.pcis1b <- lme(PCIS_final ~ preyDensity*wf_mean, random = ~1|site, weights = varIdent(form = ~1|preyDensity), data = PCIS)
+m.pcis1c <- lme(PCIS_final ~ preyDensity*wf_mean, random = ~1|site, weights = varPower(form = ~wf_mean), data = PCIS)
+
+m2          <- list(m.pcis, m.pcis1, m.pcis1b, m.pcis1c, a2) ## list of models under comparison ##
+modnames.m2 <- c("m.pcis","m.pcis1", "m.pcis1b", "m.pcis1c", "a2") ## naming different models ##
+AICctab(m2, mnames= modnames.m2, base=TRUE, weights=TRUE, logLik=TRUE) ## AICc tab ##
+
+summary(m.pcis1b)
+anova(m.pcis1b)
+
+plot(m.pcis1b)
+hist(resid(m.pcis1b))
+VarCorr(m.pcis1b)
+
+lm.MANp <- lm(PCIS_final ~ wf_mean, data = droplevels(subset(PCIS, !(preyDensity == "ambient"))))
+summary(lm.MANp)
+
+lm.AMBp <- lm(PCIS_final ~ wf_mean, data = droplevels(subset(PCIS, !(preyDensity == "manipulated"))))
+summary(lm.AMBp)
+
+## Correcting P-value:
+p <- c(5.44e-05, 0.011697)
+p.adjust(p, method = c("bonferroni"))
+
+## Conclusion: PCIS increases with wave exposure (i.e., IS gets weaker) but with different rates depending on prey density ##
+```
+
+
+## Plotting PCIS ~ prey density treatment
+```{r Predictions for PCIS}
+
+predPCIS          <- PCIS ## Dataframe for predictions ##
+predPCIS          <- subset(predPCIS, select = c(1, 2, 12, 17)) ## keep only useful columns ##
+predPCIS$wf_mean2 <- as.character(predPCIS$wf_mean) ## create character column to match ##
+predPCIS1         <- droplevels(subset(predPCIS, !(preyDensity == "manipulated")))
+
+mydfAMB        <- ggeffect(m.pcis1b, terms = c("preyDensity[ambient]", "wf_mean"))
+names(mydfAMB) <- c("preyDensity", "predicted", "sd", "low", "high", "wf_mean") ## renaming output ##
+
+predPCIS1$predicted  <- mydfAMB$predicted[match(as.character(predPCIS1$wf_mean2), as.factor(mydfAMB$wf_mean))]
+predPCIS1$low        <- mydfAMB$low[match(as.character(predPCIS1$wf_mean2), as.factor(mydfAMB$wf_mean))]
+predPCIS1$high       <- mydfAMB$high[match(as.character(predPCIS1$wf_mean2), as.factor(mydfAMB$wf_mean))]
+
+predPCIS2 = droplevels(subset(predPCIS, !(preyDensity == "ambient")))
+
+mydfMAN        <- ggeffect(m.pcis1b, terms = c("preyDensity[manipulated]", "wf_mean"))
+names(mydfMAN) <- c("preyDensity", "predicted", "sd", "low", "high", "wf_mean") ## renaming output ##
+
+predPCIS2$predicted  <- mydfMAN$predicted[match(as.character(predPCIS2$wf_mean2), as.factor(mydfMAN$wf_mean))]
+predPCIS2$low        <- mydfMAN$low[match(as.character(predPCIS2$wf_mean2), as.factor(mydfMAN$wf_mean))]
+predPCIS2$high       <- mydfMAN$high[match(as.character(predPCIS2$wf_mean2), as.factor(mydfMAN$wf_mean))]
+
+predPCIS <- rbind(predPCIS1, predPCIS2)
+rm(predPCIS1, predPCIS2)
+
+levels(predPCIS$preyDensity) <- c("ambient", "reduced")
+
+pcis_fig <-
+ggplot(predPCIS, aes(x = wf_mean, 
+                     y = PCIS_final, 
+                     color = preyDensity, 
+                     shape = preyDensity)) +
+     geom_ribbon(aes(ymin = low, 
+                     ymax = high, 
+                     fill = preyDensity),
+                 alpha = .3) +
+     scale_fill_manual(values=c("grey80", "grey80")) +
+     geom_line(aes(y = predicted, linetype = preyDensity), 
+               size = 1.1) +
+     scale_linetype_manual(values= c("solid", "solid"))+
+     geom_point(size= 2.6, 
+                alpha=0.95) + 
+     scale_shape_manual(values=c(15, 1))+
+     scale_color_manual(values=c('black','black')) +
+     theme_classic() +
+     theme(axis.text.x = element_text(size=14, color="black"), 
+           axis.text.y = element_text(size=14, color="black"),
+           axis.title.x = element_text(color="black", size=16.),
+           axis.title.y = element_text(color="black", size=16)) +
+     labs(x = expression(paste("wave fetch (log"[10]," no. of cells)")),
+          y = "PCIS") +
+     theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+     theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+     theme(axis.ticks.length = unit(4, "pt")) +
+     theme(legend.position = c(.02, .93),
+           legend.justification = c("left"),
+           legend.box.just = "left",
+           legend.margin = margin(0, 0, 0, 0),
+           legend.key.size = unit(1.5,"line")) +
+     theme(legend.title = element_text(color = "white", size = 5),
+           legend.text = element_text(color = "black", size=11))+
+     theme(plot.margin=unit(c(0.2, .2, 0.2, 0.2), "cm")) + coord_cartesian(xlim = c(2.3, 3.7))
+
+pcis_fig 
+```
+
+
+## Residuals for PCIS model: PCIS ~ prey density treatment
+```{r Residuals plots}
+
+res.pcis1 <- residuals(m.pcis1b, type = "normalized") ## to get residuals of the model ##
+fit.pcis1 <- fitted(m.pcis1b) ## to get fitted valies  of the model ##
+
+res.pcis1 <- cbind(res.pcis1, fit.pcis1) ## binding columns ##
+res.pcis1 <- as.data.frame(res.pcis1) ## transforming objetc in dataframe ##
+
+res.pcis1$preyDensity <- PCIS$preyDensity ## getting column time from dataframe with same length ##
+res.pcis1$wf_mean     <- PCIS$wf_mean ## getting column tr from dataframe with same length ##
+
+levels(res.pcis1$preyDensity) <- c("ambient", "reduced")
+
+res.1 <-
+  ggplot(res.pcis1, aes(x=fit.pcis1, y=res.pcis1)) + theme_linedraw()+ 
+  geom_point(size=2.5, alpha=0.7, colour="black")+
+  theme(axis.text.x = element_text(size=12, color="black"), 
+        axis.text.y = element_text(size=12, color="black"),
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "fitted values", 
+       y = "normalised residuals") +
+  theme(legend.position = "none") + 
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))+ 
+  theme(plot.margin = unit(c(0.15,0.30,0.15,.15), "lines")) +
+  theme(panel.background = element_rect(fill = "white",colour = "black", size = 1.0, linetype = "solid"),
+        panel.grid.major = element_line(size = .5, linetype = 'solid',colour = "gray95"), 
+        panel.grid.minor = element_line(size = .5, linetype = 'solid',colour = "gray95"))
+
+res.1b <-
+  ggplot(res.pcis1, aes(x=wf_mean, y=res.pcis1)) + theme_linedraw()+ 
+  geom_point(size=2.5, alpha=0.7, colour="black")+
+  theme(axis.text.x = element_text(size=12, color="black"), 
+        axis.text.y = element_text(size=12, color="black"),
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "wave fetch", 
+       y = "normalised residuals") +
+  theme(legend.position = "none") + 
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))+ 
+  theme(plot.margin = unit(c(0.15,0.15,.15,.15), "lines")) +
+  theme(panel.background = element_rect(fill = "white", colour = "black", size = 1.0, linetype = "solid"),
+        panel.grid.major = element_line(size = .5, linetype = 'solid',colour = "gray95"), 
+        panel.grid.minor = element_line(size = .5, linetype = 'solid',colour = "gray95"))
+
+res.2 <-
+  ggplot(res.pcis1, aes(x=preyDensity, y=res.pcis1)) + theme_linedraw() +
+  geom_point(size=2.5, alpha=0.7, colour="black")+
+  theme(axis.text.x = element_text(size=12, color="black"), 
+        axis.text.y = element_text(size=12, color="black"),
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "prey density treatment", 
+       y = "normalised residuals") +
+  theme(legend.position = "none") + 
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))+ 
+  theme(plot.margin = unit(c(0.15,0.15,.3,.15), "lines")) +
+  theme(panel.background = element_rect(fill = "white", colour = "black", size = 1.0, linetype = "solid"),
+        panel.grid.major = element_line(size = .5, linetype = 'solid',colour = "gray95"), 
+        panel.grid.minor = element_line(size = .5, linetype = 'solid',colour = "gray95"))
+
+res.3 <- 
+  ggplot(res.pcis1, aes(x=res.pcis1)) + 
+  geom_histogram(color="black", fill="white", bins=8)+ theme_linedraw()+
+  theme(axis.text.x = element_text(size=12, color="black"), 
+        axis.text.y = element_text(size=12, color="black"),
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "normalised residuals", 
+       y = "count") +
+  theme(legend.position = "none") + 
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))+ 
+  theme(plot.margin = unit(c(1.2,0.15,0.15,.15), "lines")) +
+  theme(panel.background = element_rect(fill = "white", colour = "black", size = 1.0, linetype = "solid"),
+        panel.grid.major = element_line(size = .5, linetype = 'solid',colour = "gray95"), 
+        panel.grid.minor = element_line(size = .5, linetype = 'solid',colour = "gray95"))
+
+r.pcis <- ggarrange(res.1, res.1b, res.2, res.3, ncol = 2, nrow = 2, align = "hv")
+r.pcis <- annotate_figure(r.pcis, fig.lab = "PCIS", fig.lab.face = "bold", fig.lab.size=12)
+r.pcis
+
+#ggsave("residuals_pcis_final.png", dpi = 300, width = 5.82, height = 6.01, units = "in")
+varhandle::rm.all.but(c("pcis_fig"))
+```
+
+
+## Models for consumption rate (effect of prey density and mean wave fetch)
+```{r Consumption rate }
+
+CRdata <- read_excel("Pardal-2021-data-Exp-01-Ubatuba.xlsx", sheet = 6)
+str(CRdata)
+
+CRdata$site        <- as.factor(CRdata$site)
+CRdata$preyDensity <- as.factor(CRdata$preyDensity)
+CRdata$wf_mean     <- as.numeric(CRdata$wf_mean)
+CRdata$consRate    <- as.numeric(CRdata$consRate)
+
+str(CRdata)
+
+## important: consRate negatives values turned to 0 (there cannot be negative consumprion rate):
+CRdata$consRate[CRdata$consRate < 0] = 0
+
+hist(CRdata$consRate)
+
+## Verify homogeneity of variances per stratum ##
+b0 <- gls(consRate ~ preyDensity*wf_mean, method = "REML", data = CRdata)
+b1 <- gls(consRate ~ preyDensity*wf_mean, method = "REML", weights = varIdent(form=~1|preyDensity*wf_mean), data = CRdata)
+b2 <- gls(consRate ~ preyDensity*wf_mean, method = "REML", weights = varIdent(form=~1|preyDensity), data = CRdata)
+b3 <- gls(consRate ~ preyDensity*wf_mean, method = "REML", weights = varIdent(form=~1|wf_mean), data = CRdata)
+
+m3          <- list(b0, b1, b2, b3)
+modnames.m3 <- c("b0", "b1", "b2", "b3")
+AICctab(m3, mnames = modnames.m3, base =TRUE, weights =TRUE, logLik = TRUE) 
+
+anova(b2, b0)
+summary(b2)
+plot(b2)
+## Result: heterocedasticity per treatment stratum; therefore fit model that account for that ##
+
+## LMM: number of consumed barnacles ~ prey density*wave exposure ##
+
+m.cons <- lme(consRate ~ preyDensity*wf_mean, random = ~ 1|site, data = CRdata)
+plot(m.cons)
+
+m.cons1 <- lme(consRate ~ preyDensity*wf_mean, random = ~ 1|site, weights = varIdent(form=~1|preyDensity), data = CRdata)
+plot(m.cons1)
+summary(m.cons1)
+VarCorr(m.cons1)
+
+### Separated LM per preyDensity:
+lm.MAN <- lm(consRate ~ wf_mean, data = droplevels(subset(CRdata, !(preyDensity == "ambient"))))
+summary(lm.MAN)
+plot(lm.MAN)
+hist(resid(lm.MAN))
+
+lm.AMB <- lm(consRate ~ wf_mean, data = droplevels(subset(CRdata, !(preyDensity == "manipulated"))))
+summary(lm.AMB)
+hist(resid(lm.AMB))
+
+p2 <- c(7.92e-07, 0.3710)
+p.adjust(p2, method = c("bonferroni"))
+#p.adjust(p2, method = c("fdr"))
+```
+
+
+## Plotting model with predictions ##
+```{r Predictions for consumption rate}
+
+predCons          <- CRdata ## Dataframe for predictions ##
+predCons          <- subset(predCons, select = c(1, 2, 12, 17)) ## keep only useful columns ##
+predCons$wf_mean2 <- as.character(predCons$wf_mean) ## create character column to match ##
+predCons1         <- droplevels(subset(predCons, !(preyDensity == "manipulated")))
+
+mydf2AMB        <- ggeffect(m.cons1, terms = c("preyDensity[ambient]", "wf_mean"))
+names(mydf2AMB) <- c("preyDensity", "predicted", "sd", "low", "high", "wf_mean") ## renaming output ##
+
+predCons1$predicted  <- mydf2AMB$predicted[match(as.character(predCons1$wf_mean2), as.factor(mydf2AMB$wf_mean))]
+predCons1$low        <- mydf2AMB$low[match(as.character(predCons1$wf_mean2), as.factor(mydf2AMB$wf_mean))]
+predCons1$high       <- mydf2AMB$high[match(as.character(predCons1$wf_mean2), as.factor(mydf2AMB$wf_mean))]
+
+
+predCons2 <- droplevels(subset(predCons, !(preyDensity == "ambient")))
+
+mydf2MAN        <- ggeffect(m.cons1, terms = c("preyDensity[manipulated]", "wf_mean"))
+names(mydf2MAN) <- c("preyDensity", "predicted", "sd", "low", "high", "wf_mean") ## renaming output ##
+
+predCons2$predicted  <- mydf2MAN$predicted[match(as.character(predCons2$wf_mean2), as.factor(mydf2MAN$wf_mean))]
+predCons2$low        <- mydf2MAN$low[match(as.character(predCons2$wf_mean2), as.factor(mydf2MAN$wf_mean))]
+predCons2$high       <- mydf2MAN$high[match(as.character(predCons2$wf_mean2), as.factor(mydf2MAN$wf_mean))]
+
+predCons <-rbind(predCons1, predCons2)
+rm(predCons1, predCons2)
+
+levels(predCons$preyDensity) <- c("ambient", "reduced")
+
+cons_fig <-
+ggplot(predCons, aes(x = wf_mean, 
+                     y = consRate, 
+                     color = preyDensity, 
+                     shape = preyDensity)) +
+     geom_ribbon(aes(ymin = low, 
+                     ymax = high, 
+                     fill = preyDensity), 
+                 alpha = .3) +
+     scale_fill_manual(values=c("grey80", "grey80")) +
+     geom_line(aes(y = predicted, linetype = preyDensity), size = 1.1) +
+     scale_linetype_manual(values= c("solid", "solid"))+
+     geom_point(size= 2.5, alpha=0.95) + 
+     scale_shape_manual(values=c(15,1))+
+     scale_color_manual(values=c('black','black')) +
+     theme_classic() +
+     theme(axis.text.x = element_text(size=14, color="black"), 
+           axis.text.y = element_text(size=14, color="black"),
+           axis.title.x = element_text(color="black", size=16.),
+           axis.title.y = element_text(color="black", size=16)) +
+     labs(x = expression(paste("wave fetch (log"[10]," no. of cells)")),
+          y = expression(atop("consumption rate", paste("(barnacles .whelk"^-1, ".day"^-1,")")))) +
+     theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+     theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+     theme(axis.ticks.length = unit(4, "pt")) +
+     theme(legend.position = c(.02, .93),
+           legend.justification = c("left"),
+           legend.box.just = "left",
+           legend.margin = margin(0, 0, 0, 0),
+           legend.key.size = unit(1.5,"line")) +
+     theme(legend.title = element_text(color = "white", size = 5),
+           legend.text = element_text(color = "black", size=11))+
+     theme(plot.margin=unit(c(0.2, .2, 0.2, 0.2), "cm")) + coord_cartesian(xlim = c(2.3, 3.7))
+
+cons_fig
+
+ggarrange(cons_fig, pcis_fig, ncol = 2, nrow = 1, align = "hv")
+
+#ggsave("ubatuba18-final-rev4.svg", dpi = 500, height = 4.4, width = 12.7, units = "in")## Saving 12.7 x 4.4 in image 
+```
+
+
+### Plotting residuals consumption model (consumption RATE ~ prey density treatment*wave fetch) ##
+```{r Residuals plots}
+
+res.cons2 <- residuals(m.cons1, type = "normalized") ## to get residuals of the model ##
+fit.cons2 <- fitted(m.cons1) ## to get fitted valies  of the model ##
+
+res.cons2 <- cbind(res.cons2, fit.cons2) ## binding columns ##
+res.cons2 <- as.data.frame(res.cons2) ## transforming objetc in dataframe ##
+
+res.cons2$preyDensity = CRdata$preyDensity ## getting column time from dataframe with same length ##
+res.cons2$wf_mean     = CRdata$wf_mean ## getting column tr from dataframe with same length ##
+
+levels(res.cons2$preyDensity) <- c("ambient", "reduced")
+
+res.5 <- 
+  ggplot(res.cons2, aes(x=fit.cons2, y=res.cons2)) + theme_linedraw()+ 
+  geom_point(size=2.5, alpha=0.7, colour="black")+
+  theme(axis.text.x = element_text(size=12, color="black"), 
+        axis.text.y = element_text(size=12, color="black"),
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "fitted values", 
+       y = "normalised residuals") +
+  theme(legend.position = "none") + 
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))+ 
+  theme(plot.margin = unit(c(0.15,0.30,0.15,.15), "lines")) +
+  theme(panel.background = element_rect(fill = "white",colour = "black", size = 1.0, linetype = "solid"),
+        panel.grid.major = element_line(size = .5, linetype = 'solid',colour = "gray95"), 
+        panel.grid.minor = element_line(size = .5, linetype = 'solid',colour = "gray95"))
+
+res.6 <- 
+  ggplot(res.cons2, aes(x=wf_mean, y=res.cons2)) + theme_linedraw()+ 
+  geom_point(size=2.5, alpha=0.7, colour="black")+
+  theme(axis.text.x = element_text(size=12, color="black"), 
+        axis.text.y = element_text(size=12, color="black"),
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "wave fetch", 
+       y = "normalised residuals") +
+  theme(legend.position = "none") + 
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))+ 
+  theme(plot.margin = unit(c(0.15,0.15,.15,.15), "lines")) +
+  theme(panel.background = element_rect(fill = "white",colour = "black", size = 1.0, linetype = "solid"),
+        panel.grid.major = element_line(size = .5, linetype = 'solid',colour = "gray95"), 
+        panel.grid.minor = element_line(size = .5, linetype = 'solid',colour = "gray95"))
+
+res.7 <- 
+  ggplot(res.cons2, aes(x=preyDensity, y=res.cons2)) + theme_linedraw()+ 
+  geom_point(size=2.5, alpha=0.7, colour="black")+
+  theme(axis.text.x = element_text(size=12, color="black"), 
+        axis.text.y = element_text(size=12, color="black"),
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "prey density treatment", 
+       y = "normalised residuals") +
+  theme(legend.position = "none") + 
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))+ 
+  theme(plot.margin = unit(c(0.15,0.15,.3,.15), "lines")) +
+  theme(panel.background = element_rect(fill = "white",colour = "black", size = 1.0, linetype = "solid"),
+        panel.grid.major = element_line(size = .5, linetype = 'solid',colour = "gray95"), 
+        panel.grid.minor = element_line(size = .5, linetype = 'solid',colour = "gray95"))
+
+res.8 <- 
+  ggplot(res.cons2, aes(x=res.cons2)) + 
+  geom_histogram(color="black", fill="white", bins=8)+ theme_linedraw()+
+  theme(axis.text.x = element_text(size=12, color="black"), 
+        axis.text.y = element_text(size=12, color="black"),
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "normalised residuals", 
+       y = "count") +
+  theme(legend.position = "none") + 
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))+ 
+  theme(plot.margin = unit(c(1.2,0.15,0.15,.15), "lines")) +
+  theme(panel.background = element_rect(fill = "white",colour = "black", size = 1.0, linetype = "solid"),
+        panel.grid.major = element_line(size = .5, linetype = 'solid',colour = "gray95"), 
+        panel.grid.minor = element_line(size = .5, linetype = 'solid',colour = "gray95"))
+
+r1 <- ggarrange(res.5, res.6, res.7, res.8, ncol = 2, nrow = 2, align = "hv")
+r1 <- annotate_figure(r1, fig.lab = "consumption rate", fig.lab.face = "bold", fig.lab.size=12)
+r1
+
+#ggsave("residuals_consumption-rate-final.png", dpi = 300, width = 5.82, height = 6.01, units = "in")
+```
+
+## Other figures from Experiment 01:
+## Initial density of barnacles (prey) in Ubatuba (Fig. 2 in the manuscript)
+```{r Barnacle density time 0}
+
+tetra_density <- read_excel("Pardal-2021-data-Exp-01-Ubatuba.xlsx", sheet = 7)
+
+tetra_density$barnacles   <- as.numeric(tetra_density$barnacles)
+tetra_density$site        <- as.factor(tetra_density$site)
+tetra_density$preyDensity <- as.factor(tetra_density$preyDensity)
+tetra_density$predTreat   <- as.factor(tetra_density$predTreat)
+
+str(tetra_density)
+
+tetra_density$site <- factor(tetra_density$site, levels=c('Enseada','Lamberto', 'Lázaro',
+                                                         'P. Grande', 'Maranduba', 'P. Vermelha', 
+                                                         'Itaguá', 'Sta Rita', 'Fortaleza'))
+
+tetra_density <- tetra_density[!is.na(tetra_density$barnacles),]
+
+dt <-  ddply(tetra_density, "preyDensity", transform, 
+       prey_mean  = mean(barnacles)) ## for plotting the global mean line ##
+
+barnacle_density <-
+  ggplot(dt, aes(x = predTreat, 
+                 y = barnacles, 
+                 group= site))+ 
+  theme_classic() +
+  #geom_jitter(position=position_jitter(0.02), 
+             #size=2.3, 
+             #alpha=0.2) + 
+  geom_hline(aes(yintercept = 
+                   prey_mean), 
+             colour = 'gray', 
+             linetype="dashed",
+             size=1.2)+
+  stat_summary(fun.data="mean_se",  
+               fun.args = list(mult=1),
+               geom="pointrange", 
+               color = "black", 
+               size=1.3)+
+  facet_grid(preyDensity ~ site, scale='free_y') +
+  theme(axis.text.x = element_text(size=12, color="black"),
+        axis.text.y = element_text(size=12, color="black"), 
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "treatment", 
+       y = expression(paste("number of barnacles (ind.625 cm"^-2,")")))+
+  theme(strip.text.x = element_text(size = 12), 
+        strip.text.y = element_text(size = 12))+
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))
+
+barnacle_density 
+
+#ggsave("figs/Oecologia-density_initial.png", dpi = 400, width = 9.6, height = 5, units="in") 
+```
+
+
+## Backgroun mortality in Ubatuba (ESM: Appendix A: Fig. A5-A) 
+```{r Plotting background mortality in Experiment 01}
+
+nat_mortality <- read_excel("Pardal-2021-data-Exp-01-Ubatuba.xlsx", sheet= 4)
+str(nat_mortality)
+
+nat_mortality$site         <- as.factor(nat_mortality$site)
+nat_mortality$preyDensity2 <- as.factor(nat_mortality$preyDensity2)
+nat_mortality$predTreat    <- as.factor(nat_mortality$predTreat)
+
+str(nat_mortality)
+
+nat_mortality$site <- factor(nat_mortality$site, levels=c('Enseada','Lamberto', 'Lázaro',
+                                                          'P. Grande', 'Maranduba', 'P. Vermelha', 
+                                                          'Itaguá', 'Sta Rita', 'Fortaleza'))
+
+str(nat_mortality)
+
+mort3 <- aggregate(mortNat ~ site +  preyDensity, mean, data = nat_mortality)
+mort4 <- aggregate(mortNat ~ + preyDensity, mean, data = nat_mortality)
+
+#dt2 =  ddply(nat_mortality, "preyDensity", transform, 
+       #prey_mean  = mean(mortNat)) ## for plotting the global mean line ##
+
+figMort <-
+  ggplot(nat_mortality, aes(x = preyDensity2, y = mortNat, group= site))+ 
+  theme_classic() +
+  geom_point(
+             size=2.3, 
+             alpha=0.2) + 
+  #geom_hline(aes(yintercept = prey_mean), 
+   #          colour = 'gray', 
+    #         linetype="dashed",
+     #        size=1.2)+
+  stat_summary(fun.data="mean_se",  
+               fun.args = list(mult=1),
+               geom="pointrange", 
+               color = "black", 
+               size=1.3)+
+  facet_grid( ~ site, scale='free_y') +
+  theme(axis.text.x = element_text(size=12, color="black"), 
+                                   #angle= 90, 
+                                   #vjust = 0.5,
+                                   #hjust = 1),
+        axis.text.y = element_text(size=12, color="black"), 
+        axis.title.x = element_text(color="black", size=14),
+        axis.title.y = element_text(color="black", size=14))+
+  labs(x = "prey density treatment", 
+       y = expression(atop("background mortality rate ", 
+                          paste("(barnacles.day"^-1,")")))) +
+  theme(strip.text.x = element_text(size = 12), 
+        strip.text.y = element_text(size = 12))+
+  theme(axis.ticks = element_line(colour = "black", size = 0.8)) +
+  theme(axis.line = element_line(colour = 'black', size = 0.8)) +
+  theme(axis.ticks.length = unit(4, "pt"))
+
+figMort
+#ggsave("Oecologia-back-mort-Ubatuba.svg", dpi = 300) 
+```

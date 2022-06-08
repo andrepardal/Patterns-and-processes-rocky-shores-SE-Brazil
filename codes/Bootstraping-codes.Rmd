@@ -1,0 +1,930 @@
+---
+title: "Review Oecologia: Bootstrapping Experiments 01 and 02"
+author: "ALPS"
+date: "8/10/2020"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+## Loading packages ##
+```{r}
+
+library(boot)
+library(MASS)
+library(openxlsx)  
+library(readxl)
+library(xlsx)
+library(writexl)
+
+setwd("~/Desktop/Chapter 2/submission/Oecologia/Review-9-21/Github/data")
+dir()
+```
+
+
+## Experiment 01, PCIS: Ubatuba 2018 (wave fetch vs. prey density) ##
+```{r Bootstrapping Survival rate of prey in the absence of  predators: PCIS}
+
+## I'm pretty sure there are cleaver (actually less stupid) ways of doing that, but I wasn't able to figure them out. So I used this quite extensive approach, bootstrapping data per classes of interest. In that case, I had to apply the same code 16 times for the Experiment 01 and 10 times for experiment 02. Yeah, it seems like this could have been done with 2 simple loops. If someone knows how, please let me know! I'd appreciate it. Cheers! ##
+
+survival_rate_exclusion <- read_excel("Pardal-2021-data-analysis.xlsx", sheet = 2)
+str(survival_rate_exclusion)
+
+survival_rate_exclusion$site         <- as.factor(survival_rate_exclusion$site)
+survival_rate_exclusion$preyDensity  <- as.factor(survival_rate_exclusion$preyDensity)
+survival_rate_exclusion$surv_deleted <- as.numeric(survival_rate_exclusion$surv_deleted)
+str(survival_rate_exclusion)
+
+##Enseada:
+## site = Enseada; treat = ambient:
+Ens_amb <- as.data.frame(subset(survival_rate_exclusion, site =="Enseada" & preyDensity == "ambient", select = surv_deleted))
+
+set.seed(888)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+                            }             
+boot1 <- boot(Ens_amb[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot1$t)   ##
+mean(boot1$t0)  ## = mean (data1$Ens_amb.surv_deleted)
+hist(boot1$t)
+
+rm(Ens_amb, boot1)
+
+## site = Enseada; treat = manipulated:
+Ens_man <- as.data.frame(subset(survival_rate_exclusion, site =="Enseada" & preyDensity == "manipulated", select = surv_deleted))
+
+set.seed(889)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot2 <- boot(Ens_man[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot2$t)   ##
+mean(boot2$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot2$t)
+
+rm(Ens_man, boot2)
+
+## site = Itaguá; treat = ambient:
+Ita_amb <- as.data.frame(subset(survival_rate_exclusion, site =="Itaguá" & preyDensity == "ambient", select = surv_deleted))
+
+set.seed(890)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot3 <- boot(Ita_amb[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot3$t)   ##
+mean(boot3$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot3$t)
+
+rm(Ita_amb, boot3)
+
+## site = Itaguá; treat = manipulated:
+Ita_man <- as.data.frame(subset(survival_rate_exclusion, site =="Itaguá" & preyDensity == "manipulated", select = surv_deleted))
+
+set.seed(891)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot4 <- boot(Ita_man[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot4$t)   ## 
+mean(boot4$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot4$t)
+
+rm(Ita_man, boot4)
+##################
+
+## site = Lamberto; treat = ambient:
+Lamb_amb <- as.data.frame(subset(survival_rate_exclusion, site =="Lamberto" & preyDensity == "ambient", select = surv_deleted))
+
+set.seed(892)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot5 <- boot(Lamb_amb[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot5$t)   ##
+mean(boot5$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot5$t)
+
+rm(Lamb_amb, boot5)
+
+## site = Lamberto; treat = manipulated:
+Lamb_man <- as.data.frame(subset(survival_rate_exclusion, site =="Lamberto" & preyDensity == "manipulated", select = surv_deleted))
+
+set.seed(893)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot6 <- boot(Lamb_man[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot6$t)   ## 
+mean(boot6$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot6$t)
+
+rm(Lamb_man, boot6)
+##################
+
+## site = Lázaro; treat = ambient:
+Laz_amb <- as.data.frame(subset(survival_rate_exclusion, site =="Lázaro" & preyDensity == "ambient", select = surv_deleted))
+
+set.seed(894)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot7 <- boot(Laz_amb[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot7$t)   ##
+mean(boot7$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot7$t)
+
+rm(Laz_amb, boot7)
+
+## site = Lázaro; treat = manipulated:
+Laz_man <- as.data.frame(subset(survival_rate_exclusion, site =="Lázaro" & preyDensity == "manipulated", select = surv_deleted))
+
+set.seed(895)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot8 <- boot(Laz_man[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot8$t)   ## 
+mean(boot8$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot8$t)
+
+rm(Laz_man, boot8)
+##################
+
+## site = Maranduba; treat = ambient:
+Mar_amb <- as.data.frame(subset(survival_rate_exclusion, site =="Maranduba" & preyDensity == "ambient", select = surv_deleted))
+
+set.seed(896)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot9 <- boot(Mar_amb[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot9$t)   ##
+mean(boot9$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot9$t)
+
+rm(Mar_amb, boot9)
+
+## site = Maranduba; treat = manipulated:
+Mar_man <- as.data.frame(subset(survival_rate_exclusion, site =="Maranduba" & preyDensity == "manipulated", select = surv_deleted))
+
+set.seed(897)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot10 <- boot(Mar_man[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot10$t)   ## 
+mean(boot10$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot10$t)
+
+rm(Mar_man, boot10)
+##################
+
+## site = P. Grande; treat = ambient:
+PG_amb <- as.data.frame(subset(survival_rate_exclusion, site =="P. Grande" & preyDensity == "ambient", select = surv_deleted))
+
+set.seed(896)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot11 <- boot(PG_amb[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot11$t)   ##
+mean(boot11$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot11$t)
+
+rm(PG_amb, boot11)
+
+## site = P. Grande; treat = manipulated:
+PG_man <- as.data.frame(subset(survival_rate_exclusion, site =="P. Grande" & preyDensity == "manipulated", select = surv_deleted))
+
+set.seed(897)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot12 <- boot(PG_man[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot12$t)   ## 
+mean(boot12$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot12$t)
+
+rm(PG_man, boot12)
+##################
+
+## site = P. Vermelha; treat = ambient:
+PV_amb <- as.data.frame(subset(survival_rate_exclusion, site =="P. Vermelha" & preyDensity == "ambient", select = surv_deleted))
+
+set.seed(898)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot13 <- boot(PV_amb[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot13$t)   ##
+mean(boot13$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot13$t)
+
+rm(PV_amb, boot13)
+
+## site = P. Vermelha; treat = manipulated:
+PV_man <- as.data.frame(subset(survival_rate_exclusion, site =="P. Vermelha" & preyDensity == "manipulated", select = surv_deleted))
+
+set.seed(899)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot14 <- boot(PV_man[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot14$t)   ## 
+mean(boot14$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot14$t)
+
+rm(PV_man, boot14)
+##################
+
+## site = Sta Rita; treat = ambient:
+StR_amb <- as.data.frame(subset(survival_rate_exclusion, site =="Sta Rita" & preyDensity == "ambient", select = surv_deleted))
+
+set.seed(898)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot15 <- boot(StR_amb[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot15$t)   ##
+mean(boot15$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot15$t)
+
+rm(StR_amb, boot15)
+
+## site = Sta Rita; treat = manipulated:
+StR_man <- as.data.frame(subset(survival_rate_exclusion, site =="Sta Rita" & preyDensity == "manipulated", select = surv_deleted))
+
+set.seed(899)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot16 <- boot(StR_man[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot16$t)   ## 
+mean(boot16$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot16$t)
+
+rm(StR_man, boot16)
+rm(survival_rate_exclusion)
+```
+
+
+## Experiment 01: Consumption rate analysis ##
+```{r Bootstrapping Mortality rate of prey in the absence of  predators for COMSUMPTION RATE analysis}
+
+survival_rate_exclusion <- read_excel("Pardal-2021-data-analysis.xlsx", sheet = 3)
+str(survival_rate_exclusion)
+
+survival_rate_exclusion$site        <- as.factor(survival_rate_exclusion$site)
+survival_rate_exclusion$preyDensity <- as.factor(survival_rate_exclusion$preyDensity)
+survival_rate_exclusion$mortNat     <- as.numeric(survival_rate_exclusion$mortNat)
+str(survival_rate_exclusion)
+
+##Enseada:
+## site = Enseada; treat = ambient:
+Ens_amb <- as.data.frame(subset(survival_rate_exclusion, site =="Enseada" & preyDensity == "ambient", select = mortNat))
+
+set.seed(888)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+                            }             
+boot1 <- boot(Ens_amb[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot1$t)   ##
+mean(boot1$t0)  ##
+hist(boot1$t)
+
+rm(Ens_amb, boot1)
+
+## site = Enseada; treat = manipulated:
+Ens_man <- as.data.frame(subset(survival_rate_exclusion, site =="Enseada" & preyDensity == "manipulated", select = mortNat))
+
+set.seed(889)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot2 <- boot(Ens_man[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot2$t)   ##
+mean(boot2$t0)  ## = mmean (data1$Ens_amb.mortNat)
+hist(boot2$t)
+
+rm(Ens_man, boot2)
+
+## site = Itaguá; treat = ambient:
+Ita_amb <- as.data.frame(subset(survival_rate_exclusion, site =="Itaguá" & preyDensity == "ambient", select = mortNat))
+
+set.seed(890)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot3 <- boot(Ita_amb[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot3$t)   ##
+mean(boot3$t0)  ## = mmean (data1$Ens_amb.mortNat)
+hist(boot3$t)
+
+rm(Ita_amb, boot3)
+
+## site = Itaguá; treat = manipulated:
+Ita_man <- as.data.frame(subset(survival_rate_exclusion, site =="Itaguá" & preyDensity == "manipulated", select = mortNat))
+
+set.seed(891)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot4 <- boot(Ita_man[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot4$t)   ## 
+mean(boot4$t0)  ## = mmean (data1$Ens_amb.mortNat)
+hist(boot4$t)
+
+rm(Ita_man, boot4)
+##################
+
+## site = Lamberto; treat = ambient:
+Lamb_amb <- as.data.frame(subset(survival_rate_exclusion, site =="Lamberto" & preyDensity == "ambient", select = mortNat))
+
+set.seed(892)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot5 <- boot(Lamb_amb[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot5$t)   ##
+mean(boot5$t0)  ## = mmean (data1$Ens_amb.mortNat)
+hist(boot5$t)
+
+rm(Lamb_amb, boot5)
+
+## site = Lamberto; treat = manipulated:
+Lamb_man <- as.data.frame(subset(survival_rate_exclusion, site =="Lamberto" & preyDensity == "manipulated", select = mortNat))
+
+set.seed(893)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot6 <- boot(Lamb_man[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot6$t)   ## 
+mean(boot6$t0)  ## = mmean (data1$Ens_amb.mortNat)
+hist(boot6$t)
+
+rm(Lamb_man, boot6)
+##################
+
+## site = Lázaro; treat = ambient:
+Laz_amb <- as.data.frame(subset(survival_rate_exclusion, site =="Lázaro" & preyDensity == "ambient", select = mortNat))
+
+set.seed(894)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot7 <- boot(Laz_amb[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot7$t)   ##
+mean(boot7$t0)  ## = mmean (data1$Ens_amb.mortNat)
+hist(boot7$t)
+
+rm(Laz_amb, boot7)
+
+## site = Lázaro; treat = manipulated:
+Laz_man <- as.data.frame(subset(survival_rate_exclusion, site =="Lázaro" & preyDensity == "manipulated", select = mortNat))
+
+set.seed(895)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot8 <- boot(Laz_man[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot8$t)   ## 
+mean(boot8$t0)  ## = mmean (data1$Ens_amb.mortNat)
+hist(boot8$t)
+
+rm(Laz_man, boot8)
+##################
+
+## site = Maranduba; treat = ambient:
+Mar_amb <- as.data.frame(subset(survival_rate_exclusion, site =="Maranduba" & preyDensity == "ambient", select = mortNat))
+
+set.seed(896)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot9 <- boot(Mar_amb[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot9$t)   ##
+mean(boot9$t0)  ## = mmean (data1$Ens_amb.mortNat)
+hist(boot9$t)
+
+rm(Mar_amb, boot9)
+
+## site = Maranduba; treat = manipulated:
+Mar_man <- as.data.frame(subset(survival_rate_exclusion, site =="Maranduba" & preyDensity == "manipulated", select = mortNat))
+
+set.seed(897)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot10 <- boot(Mar_man[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot10$t)   ## 
+mean(boot10$t0)  ## = mmean (data1$Ens_amb.mortNat)
+hist(boot10$t)
+
+rm(Mar_man, boot10)
+##################
+
+## site = P. Grande; treat = ambient:
+PG_amb <- as.data.frame(subset(survival_rate_exclusion, site =="P. Grande" & preyDensity == "ambient", select = mortNat))
+
+set.seed(896)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot11 <- boot(PG_amb[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot11$t)   ##
+mean(boot11$t0)  ## = mmean (data1$Ens_amb.mortNat)
+hist(boot11$t)
+
+rm(PG_amb, boot11)
+
+## site = P. Grande; treat = manipulated:
+PG_man <- as.data.frame(subset(survival_rate_exclusion, site =="P. Grande" & preyDensity == "manipulated", select = mortNat))
+
+set.seed(897)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot12 <- boot(PG_man[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot12$t)   ## 
+mean(boot12$t0)  ## = mmean (data1$Ens_amb.mortNat)
+hist(boot12$t)
+
+rm(PG_man, boot12)
+##################
+
+## site = P. Vermelha; treat = ambient:
+PV_amb <- as.data.frame(subset(survival_rate_exclusion, site =="P. Vermelha" & preyDensity == "ambient", select = mortNat))
+
+set.seed(898)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot13 <- boot(PV_amb[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot13$t)   ##
+mean(boot13$t0)  ## = mmean (data1$Ens_amb.mortNat)
+hist(boot13$t)
+
+rm(PV_amb, boot13)
+
+## site = P. Vermelha; treat = manipulated:
+PV_man <- as.data.frame(subset(survival_rate_exclusion, site =="P. Vermelha" & preyDensity == "manipulated", select = mortNat))
+
+set.seed(899)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot14 <- boot(PV_man[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot14$t)   ## 
+mean(boot14$t0)  ## = mmean (data1$Ens_amb.mortNat)
+hist(boot14$t)
+
+rm(PV_man, boot14)
+##################
+
+## site = Sta Rita; treat = ambient:
+StR_amb <- as.data.frame(subset(survival_rate_exclusion, site =="Sta Rita" & preyDensity == "ambient", select = mortNat))
+
+set.seed(898)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot15 <- boot(StR_amb[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot15$t)   ##
+mean(boot15$t0)  ## = mmean (data1$Ens_amb.mortNat)
+hist(boot15$t)
+
+rm(StR_amb, boot15)
+
+## site = Sta Rita; treat = manipulated:
+StR_man <- as.data.frame(subset(survival_rate_exclusion, site =="Sta Rita" & preyDensity == "manipulated", select = mortNat))
+
+set.seed(899)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot16 <- boot(StR_man[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot16$t)   ## 
+mean(boot16$t0)  ## = mmean (data1$Ens_amb.mortNat)
+hist(boot16$t)
+
+rm(StR_man, boot16)
+rm(survival_rate_exclusion)
+```
+############################################################# END EXPERIMENT 01 ###########################################################################
+
+
+## Experiment 2: LARGE-SCALE 10 sites ##
+```{r Bootstrapping Survival rate of prey in the absence of  predators: PCIS}
+
+survival_rate_exclusion <- read_excel("Pardal-2021-data-analysis.xlsx", sheet = 5)
+str(survival_rate_exclusion)
+
+survival_rate_exclusion$site <- as.factor(survival_rate_exclusion$site)
+
+##Fortaleza:
+Fort.site <- as.data.frame(subset(survival_rate_exclusion, site =="Fortaleza", select = surv_deleted))
+
+set.seed(888)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+                            }             
+boot1 <- boot(Fort.site[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot1$t)   ##
+mean(boot1$t0)  ##
+hist(boot1$t)
+
+rm(Fort.site, boot1)
+
+## Prainha
+Prainha.site <- as.data.frame(subset(survival_rate_exclusion, site =="Prainha", select = surv_deleted))
+
+set.seed(889)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot2 <- boot(Prainha.site[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot2$t)   ##
+mean(boot2$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot2$t)
+
+rm(Prainha.site, boot2)
+
+## Zimbro
+Zimbro.site <- as.data.frame(subset(survival_rate_exclusion, site =="Zimbro", select = surv_deleted))
+
+set.seed(890)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot3 <- boot(Zimbro.site[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot3$t)   ##
+mean(boot3$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot3$t)
+
+rm(Zimbro.site, boot3)
+
+## Asturias
+Ast.site <- as.data.frame(subset(survival_rate_exclusion, site =="Astúrias", select = surv_deleted))
+
+set.seed(891)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot4 <- boot(Ast.site[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot4$t)   ## 
+mean(boot4$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot4$t)
+
+rm(Ast.site, boot4)
+##################
+
+## Itassuce
+Itas.site <- as.data.frame(subset(survival_rate_exclusion, site =="Itassucê", select = surv_deleted))
+
+set.seed(892)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot5 <- boot(Itas.site[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot5$t)   ##
+mean(boot5$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot5$t)
+
+rm(Itas.site, boot5)
+
+## Iporanga
+Ipo.site <- as.data.frame(subset(survival_rate_exclusion, site =="Iporanga", select = surv_deleted))
+
+set.seed(893)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot6 <- boot(Ipo.site[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot6$t)   ## 
+mean(boot6$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot6$t)
+
+rm(Ipo.site, boot6)
+##################
+
+## P. Grande
+PG.site <- as.data.frame(subset(survival_rate_exclusion, site =="P. Grande", select = surv_deleted))
+
+set.seed(894)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot7 <- boot(PG.site[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot7$t)   ##
+mean(boot7$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot7$t)
+
+rm(PG.site, boot7)
+
+## P. Vermelha
+PV.site <- as.data.frame(subset(survival_rate_exclusion, site =="P. Vermelha", select = surv_deleted))
+
+set.seed(895)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot8 <- boot(PV.site[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot8$t)   ## 
+mean(boot8$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot8$t)
+
+rm(PV.site, boot8)
+##################
+
+## Grumari
+Gru.site <- as.data.frame(subset(survival_rate_exclusion, site =="Grumari", select = surv_deleted))
+
+set.seed(896)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot9 <- boot(Gru.site[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot9$t)   ##
+mean(boot9$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot9$t)
+
+rm(Gru.site, boot9)
+
+## Piratininga
+Pira.site <- as.data.frame(subset(survival_rate_exclusion, site =="Piratininga", select = surv_deleted))
+
+set.seed(897)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot10 <- boot(Pira.site[, "surv_deleted", drop = F], meanfun, R = 1000)
+mean(boot10$t)   ## 
+mean(boot10$t0)  ## = mmean (data1$Ens_amb.surv_deleted)
+hist(boot10$t)
+
+rm(Pira.site, boot10)
+##################
+
+rm(survival_rate_exclusion)
+```
+
+
+## Experiment 02: LARGE-SCALE Consumption rate ##
+```{r Bootstrapping Survival rate of prey in the absence of  predators: consRate}
+
+survival_rate_exclusion <- read_excel("Pardal-2021-data-analysis.xlsx", sheet = 5)
+str(survival_rate_exclusion)
+
+survival_rate_exclusion$site <- as.factor(survival_rate_exclusion$site)
+
+##Fortaleza:
+Fort.site <- as.data.frame(subset(survival_rate_exclusion, site =="Fortaleza", select = mortNat))
+
+library(boot)
+library(MASS)
+
+set.seed(888)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+                            }             
+boot1 <- boot(Fort.site[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot1$t)   ##
+mean(boot1$t0)  ##
+hist(boot1$t)
+
+rm(Fort.site, boot1)
+
+## Prainha
+Prainha.site <- as.data.frame(subset(survival_rate_exclusion, site =="Prainha", select = mortNat))
+
+set.seed(889)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot2 <- boot(Prainha.site[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot2$t)   ##
+mean(boot2$t0)  ## 
+hist(boot2$t)
+
+rm(Prainha.site, boot2)
+
+## Zimbro
+Zimbro.site <- as.data.frame(subset(survival_rate_exclusion, site =="Zimbro", select = mortNat))
+
+set.seed(890)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot3 <- boot(Zimbro.site[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot3$t)   ##
+mean(boot3$t0)  ##
+hist(boot3$t)
+
+rm(Zimbro.site, boot3)
+
+## Asturias
+Ast.site <- as.data.frame(subset(survival_rate_exclusion, site =="Astúrias", select = mortNat))
+
+set.seed(891)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot4 <- boot(Ast.site[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot4$t)   ## 
+mean(boot4$t0)  ## 
+hist(boot4$t)
+
+rm(Ast.site, boot4)
+##################
+
+## Itassuce
+Itas.site <- as.data.frame(subset(survival_rate_exclusion, site =="Itassucê", select = mortNat))
+
+set.seed(892)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot5 <- boot(Itas.site[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot5$t)   ##
+mean(boot5$t0)  ##
+hist(boot5$t)
+
+rm(Itas.site, boot5)
+
+## Iporanga
+Ipo.site <- as.data.frame(subset(survival_rate_exclusion, site =="Iporanga", select = mortNat))
+
+set.seed(893)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot6 <- boot(Ipo.site[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot6$t)   ## 
+mean(boot6$t0)  ## 
+hist(boot6$t)
+
+rm(Ipo.site, boot6)
+##################
+
+## P. Grande
+PG.site <- as.data.frame(subset(survival_rate_exclusion, site =="P. Grande", select = mortNat))
+
+set.seed(894)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot7 <- boot(PG.site[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot7$t)   ##
+mean(boot7$t0)  ## 
+hist(boot7$t)
+
+rm(PG.site, boot7)
+
+## P. Vermelha
+PV.site <- as.data.frame(subset(survival_rate_exclusion, site =="P. Vermelha", select = mortNat))
+
+set.seed(895)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot8 <- boot(PV.site[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot8$t)   ## 
+mean(boot8$t0)  ## 
+hist(boot8$t)
+
+rm(PV.site, boot8)
+##################
+
+## Grumari
+Gru.site = as.data.frame(subset(survival_rate_exclusion, site =="Grumari", select = mortNat))
+
+set.seed(896)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot9 <- boot(Gru.site[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot9$t)   ##
+mean(boot9$t0)  ## 
+hist(boot9$t)
+
+rm(Gru.site, boot9)
+
+## Piratininga
+Pira.site <- as.data.frame(subset(survival_rate_exclusion, site =="Piratininga", select = mortNat))
+
+set.seed(897)
+meanfun <- function(data, indices){
+           dt <- data[indices, ]
+           return(mean(dt))   
+} 
+
+boot10 <- boot(Pira.site[, "mortNat", drop = F], meanfun, R = 1000)
+mean(boot10$t)   ## 
+mean(boot10$t0)  ## 
+hist(boot10$t)
+
+rm(Pira.site, boot10)
+##################
+
+rm(survival_rate_exclusion)
+```
